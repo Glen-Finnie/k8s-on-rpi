@@ -3,13 +3,13 @@
 set -e
 
 source /etc/lsb-release
-if [ "$DISTRIB_RELEASE" != "20.04" ]; then
+if [ "$DISTRIB_RELEASE" != "22.04" ]; then
     echo
     echo "#################################"
     echo "############# ERROR #############"
     echo "#################################"
     echo
-    echo "This script is intended for Ubuntu 20.04"
+    echo "This script is intended for Ubuntu 22.04"
     echo "You're using: ${DISTRIB_DESCRIPTION}"
     exit 1
 fi
@@ -26,7 +26,7 @@ swapoff -a
 ### From https://kubernetes.io/docs/setup/production-environment/tools/kubeadm/install-kubeadm/
 
 ### install containerd
-CONTAINERD_VERSION=1.5.9-0ubuntu1~20.04.4
+CONTAINERD_VERSION=1.5.9-0ubuntu3
 sudo apt --yes update
 sudo apt --yes install containerd=${CONTAINERD_VERSION}
 sudo apt-mark hold containerd
@@ -60,7 +60,7 @@ sudo mkdir -p /etc/containerd
 containerd config default | sudo tee /etc/containerd/config.toml > /dev/null
 
 ### install kubeadm kubelet kubectl
-KUBE_VERSION=1.23.6
+KUBE_VERSION=1.25.0
 sudo apt --yes install apt-transport-https ca-certificates curl
 
 sudo curl -fsSLo /usr/share/keyrings/kubernetes-archive-keyring.gpg https://packages.cloud.google.com/apt/doc/apt-key.gpg
