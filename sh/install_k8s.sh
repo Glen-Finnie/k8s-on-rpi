@@ -14,6 +14,11 @@ if [ "$DISTRIB_RELEASE" != "22.04" ]; then
     exit 1
 fi
 
+### Set up auto complete and alias for kubectl
+echo 'source <(kubectl completion bash)' >> ~/.bashrc
+echo 'alias k=kubectl' >> ~/.bashrc
+echo 'complete -F __start_kubectl k' >> ~/.bashrc
+
 ### Check ip_forward is enabled
 echo
 echo "#################################"
