@@ -15,14 +15,21 @@ if [ "$DISTRIB_RELEASE" != "22.04" ]; then
 fi
 
 ### Set up auto complete and alias for kubectl
-echo 'source <(kubectl completion bash)' >> ~/.bashrc
-echo 'alias k=kubectl' >> ~/.bashrc
-echo 'complete -F __start_kubectl k' >> ~/.bashrc
+if ! grep -q 'source <(kubectl completion bash)' ~/.bashrc; then
+    echo 'source <(kubectl completion bash)' >> ~/.bashrc
+fi
+if ! grep -q 'alias k=kubectl' ~/.bashrc; then
+    echo 'alias k=kubectl' >> ~/.bashrc
+fi
+if ! grep -q 'complete -F __start_kubectl k' ~/.bashrc; then
+    echo 'complete -F __start_kubectl k' >> ~/.bashrc
+fi
 
 ### Check ip_forward is enabled
 echo
-echo "#################################"
-echo "###### net.ipv4.ip_forward ######"
+echo "#####################################"
+echo "######## net.ipv4.ip_forward ########"
+echo "# The value below must be 1 (not 0) #"
 sysctl net.ipv4.ip_forward
 
 ### Disable swap
