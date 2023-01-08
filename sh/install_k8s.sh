@@ -15,15 +15,9 @@ if [ "$DISTRIB_RELEASE" != "22.04" ]; then
 fi
 
 ### Set up auto complete and alias for kubectl
-if ! grep -q 'source <(kubectl completion bash)' ~/.bashrc; then
-    echo 'source <(kubectl completion bash)' >> ~/.bashrc
-fi
-if ! grep -q 'alias k=kubectl' ~/.bashrc; then
-    echo 'alias k=kubectl' >> ~/.bashrc
-fi
-if ! grep -q 'complete -F __start_kubectl k' ~/.bashrc; then
-    echo 'complete -F __start_kubectl k' >> ~/.bashrc
-fi
+echo 'source <(kubectl completion bash)' >> ~/.bashrc
+echo 'alias k=kubectl' >> ~/.bashrc
+echo 'complete -F __start_kubectl k' >> ~/.bashrc
 
 ### Check ip_forward is enabled
 echo
@@ -36,18 +30,6 @@ sysctl net.ipv4.ip_forward
 swapoff -a
 
 ### From https://kubernetes.io/docs/setup/production-environment/tools/kubeadm/install-kubeadm/
-
-### install containerd
-CONTAINERD_VERSION=1.5.9-0ubuntu3
-sudo apt --yes update
-sudo apt --yes install containerd=${CONTAINERD_VERSION}
-sudo apt-mark hold containerd
-
-echo
-echo "######## containerd version ########"
-echo
-containerd --version
-echo
 
 ### Enable Kernal overlay & br_netfilter Modules required by containerd
 cat <<EOF | sudo tee /etc/modules-load.d/containerd.conf
@@ -67,9 +49,59 @@ echo "######### br_netfilter ##########"
 lsmod | grep br_netfilter
 echo
 
+### Install containerd
+CONTAINERD_VERSION=1.6.12
+mkdir files
+wget -qP files https://github.com/containerd/containerd/releases/download/v${CONTAINERD_VERSION}/containerd-${CONTAINERD_VERSION}-linux-arm64.tar.gz
+sudo tar Cxzvf /usr/local files/containerd-${CONTAINERD_VERSION}-linux-arm64.tar.gz
+
+echo
+echo "######## containerd version ########"
+echo
+containerd --version
+echo
+
+sudo mkdir -p /usr/local/lib/systemd/system
+sudo wget -qP /usr/local/lib/systemd/system https://raw.githubusercontent.com/containerd/containerd/main/containerd.service
+sudo systemctl daemon-reload
+sudo systemctl enable --now containerd
+
+### Install runc
+RUNC_VERSION=1.1.4
+wget -qP files https://github.com/opencontainers/runc/releases/download/v${RUNC_VERSION}/runc.arm64
+sudo install -m 755 files/runc.arm64 /usr/local/sbin/runc
+
+### Install CNI plugins
+CNI_VERSION=1.1.1
+wget -qP files https://github.com/containernetworking/plugins/releases/download/v${CNI_VERSION}/cni-plugins-linux-arm64-v${CNI_VERSION}.tgz
+sudo mkdir -p /opt/cni/bin
+sudo tar Cxzvf /opt/cni/bin files/cni-plugins-linux-arm64-v${CNI_VERSION}.tgz
+
+### Set the endpoint for crictl to containerd
+cat <<EOF | sudo tee /etc/crictl.yaml
+runtime-endpoint: unix:///var/run/containerd/containerd.sock
+image-endpoint: unix:///var/run/containerd/containerd.sock
+timeout: 10
+EOF
+
 ### Create the containerd config file
 sudo mkdir -p /etc/containerd
 containerd config default | sudo tee /etc/containerd/config.toml > /dev/null
+
+### Modify containerd config file to use systemd
+
+### [plugins."io.containerd.grpc.v1.cri".containerd.runtimes.runc]
+###   ...
+###   [plugins."io.containerd.grpc.v1.cri".containerd.runtimes.runc.options]
+###     SystemdCgroup = true
+sudo sed -i 's/SystemdCgroup = false/SystemdCgroup = true/g' /etc/containerd/config.toml
+sudo systemctl restart containerd
+
+echo
+echo "######## SystemdCgroup true ########"
+echo
+sudo crictl info | grep SystemdCgroup
+echo
 
 ### install kubeadm kubelet kubectl
 KUBE_VERSION=1.25.0
@@ -97,3 +129,8 @@ echo "######## kubelet version ########"
 echo
 kubelet --version
 echo
+
+### Set up auto complete and alias for kubectl
+echo 'source <(kubectl completion bash)' >> ~/.bashrc
+echo 'alias k=kubectl' >> ~/.bashrc
+echo 'complete -F __start_kubectl k' >> ~/.bashrc
