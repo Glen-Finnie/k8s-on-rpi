@@ -2,88 +2,355 @@
 
 set -e
 
+source test_fn.sh
+
 source /etc/lsb-release
-if [ "$DISTRIB_RELEASE" != "22.04" ]; then
+if [ "$DISTRIB_RELEASE" != "22.04" ]
+then
     echo
-    echo "#################################"
-    echo "############# ERROR #############"
-    echo "#################################"
+    echo "########################################"
+    echo "############### ERROR ##################"
+    echo "########################################"
     echo
     echo "This script is intended for Ubuntu 22.04"
     echo "You're using: ${DISTRIB_DESCRIPTION}"
     exit 1
 fi
 
-### Set up auto complete and alias for kubectl
-echo 'source <(kubectl completion bash)' >> ~/.bashrc
-echo 'alias k=kubectl' >> ~/.bashrc
-echo 'complete -F __start_kubectl k' >> ~/.bashrc
+# Enable Kernal overlay & br_netfilter modules required by containerd
+# Add overlay & br_netfilter to k8s.conf file so module will load on
+# restart.
+add_overlay_and_br_netfilter_modules_function () {
 
-### Check ip_forward is enabled
-echo
-echo "#####################################"
-echo "######## net.ipv4.ip_forward ########"
-echo "# The value below must be 1 (not 0) #"
-sysctl net.ipv4.ip_forward
-
-### Disable swap
-swapoff -a
-
-### From https://kubernetes.io/docs/setup/production-environment/tools/kubeadm/install-kubeadm/
-
-### Enable Kernal overlay & br_netfilter Modules required by containerd
-cat <<EOF | sudo tee /etc/modules-load.d/containerd.conf
+# Add overlay & br_netfilter to k8s.conf file
+    cat <<EOF | sudo tee /etc/modules-load.d/k8s.conf
 overlay
 br_netfilter
 EOF
-sudo modprobe overlay
-sudo modprobe br_netfilter
+    echo
+    echo "# added overlay & br_netfilter modules to /etc/modules-load.d/k8s.conf #"
 
-echo
-echo "########### overlay #############"
-lsmod | grep overlay
-echo
+    # Load the overlay & br_netfilter modules
+    sudo modprobe overlay
+    sudo modprobe br_netfilter
 
-echo
-echo "######### br_netfilter ##########"
-lsmod | grep br_netfilter
-echo
+    echo
+    echo "# loading overlay & br_netfilter modules #"
+}
 
-### Install containerd
-CONTAINERD_VERSION=1.6.12
-mkdir files
-wget -qP files https://github.com/containerd/containerd/releases/download/v${CONTAINERD_VERSION}/containerd-${CONTAINERD_VERSION}-linux-arm64.tar.gz
-sudo tar Cxzvf /usr/local files/containerd-${CONTAINERD_VERSION}-linux-arm64.tar.gz
+### From https://kubernetes.io/docs/setup/production-environment/container-runtimes/#install-and-configure-prerequisites
 
-echo
-echo "######## containerd version ########"
-echo
-containerd --version
-echo
+### Enable Kernal overlay & br_netfilter modules required by containerd
 
-sudo mkdir -p /usr/local/lib/systemd/system
-sudo wget -qP /usr/local/lib/systemd/system https://raw.githubusercontent.com/containerd/containerd/main/containerd.service
-sudo systemctl daemon-reload
-sudo systemctl enable --now containerd
+if check_overlay_and_br_netfilter_modules_loaded_function
+then
 
-### Install runc
-RUNC_VERSION=1.1.4
-wget -qP files https://github.com/opencontainers/runc/releases/download/v${RUNC_VERSION}/runc.arm64
-sudo install -m 755 files/runc.arm64 /usr/local/sbin/runc
+    echo
+    echo "# overlay & br_netfilter modules loaded #"
 
-### Install CNI plugins
-CNI_VERSION=1.1.1
-wget -qP files https://github.com/containernetworking/plugins/releases/download/v${CNI_VERSION}/cni-plugins-linux-arm64-v${CNI_VERSION}.tgz
-sudo mkdir -p /opt/cni/bin
-sudo tar Cxzvf /opt/cni/bin files/cni-plugins-linux-arm64-v${CNI_VERSION}.tgz
+else
 
-### Set the endpoint for crictl to containerd
-cat <<EOF | sudo tee /etc/crictl.yaml
-runtime-endpoint: unix:///var/run/containerd/containerd.sock
-image-endpoint: unix:///var/run/containerd/containerd.sock
-timeout: 10
+    echo
+    echo "# overlay & br_netfilter modules not loaded #"
+
+    add_overlay_and_br_netfilter_modules_function
+
+    if check_overlay_and_br_netfilter_modules_loaded_function
+    then
+
+        echo
+        echo "# overlay & br_netfilter modules loaded #"
+
+    else
+
+        echo
+        echo "#######################################################"
+        echo "###################### ERROR ##########################"
+        echo "#######################################################"
+        echo "# Error overlay & br_netfilter modules failed to load #"
+        echo
+        exit 1
+    fi
+fi
+
+add_net_configurations_function() {
+
+   # sysctl params required by setup
+   cat <<EOF | sudo tee /etc/sysctl.d/k8s.conf
+net.bridge.bridge-nf-call-iptables  = 1
+net.bridge.bridge-nf-call-ip6tables = 1
+net.ipv4.ip_forward                 = 1
 EOF
 
+   # Apply sysctl params
+   sudo sysctl --system
+}
+
+# From https://kubernetes.io/docs/setup/production-environment/container-runtimes/#forwarding-ipv4-and-letting-iptables-see-bridged-traffic
+
+# Forwarding IPv4 and letting iptables see bridged traffic
+echo
+echo "# Forwarding IPv4 and letting iptables see bridged traffic #"
+
+if check_ip_forward_enabled_function && check_bridged_packets_sent_to_iptable_function && check_bridged_IP6_packets_sent_to_iptable_function
+then
+
+    echo
+    echo "# sysctl net configurations set correctly #"
+
+else
+
+    echo
+    echo "# sysctl net configurations not set correctly #"
+
+    add_net_configurations_function
+
+    if check_ip_forward_enabled_function && check_bridged_packets_sent_to_iptable_function && check_bridged_IP6_packets_sent_to_iptable_function
+    then
+
+        echo
+        echo "# sysctl net configurations set correctly #"
+
+    else
+
+        echo
+        echo "###############################################"
+        echo "################# ERROR #######################"
+        echo "###############################################"
+        echo "# sysctl net configurations not set correctly #"
+        echo
+        exit 1
+    fi
+fi
+
+# Disable swap
+swapoff -a
+echo
+echo "# Disabled swap #"
+
+# Install containerd, runc, CNI plugins
+# From https://github.com/containerd/containerd/blob/main/docs/getting-started.md
+
+echo
+echo "# Starting install of containerd, runc, CNI plugins #"
+mkdir -p files
+
+install_containerd_function() {
+
+    ## Install containerd
+    CONTAINERD_VERSION=1.7.11
+    wget -qP files https://github.com/containerd/containerd/releases/download/v${CONTAINERD_VERSION}/containerd-${CONTAINERD_VERSION}-linux-arm64.tar.gz
+    sudo tar Cxzvf /usr/local files/containerd-${CONTAINERD_VERSION}-linux-arm64.tar.gz
+
+    ## Mark containerd so apt package manager doesn't overwright 
+    sudo apt-mark hold containerd
+
+    echo
+    echo "######## containerd version ########"
+    echo
+    containerd --version
+    echo
+}
+
+if check_containerd_installed_function
+then
+    echo
+    echo "##### containerd already installed #####"
+else
+    echo
+    echo "### containerd not found, installing ###"
+
+    install_containerd_function
+    if check_containerd_installed_function
+    then
+        echo
+        echo "##### containerd installed #####"
+    else
+
+        echo
+        echo "###############################################"
+        echo "################# ERROR #######################"
+        echo "###############################################"
+        echo "########### containerd not installed ##########"
+        echo
+        exit 1
+    fi
+fi
+
+install_containerd_service_file_function() {
+
+    ## Load systemd containerd service file
+    sudo mkdir -p /usr/local/lib/systemd/system
+    sudo wget -qP /usr/local/lib/systemd/system https://raw.githubusercontent.com/containerd/containerd/main/containerd.service
+
+    echo
+    echo "Downloaded systemd containerd service file"
+}
+
+start_containerd_service_function() {
+
+    sudo systemctl daemon-reload
+    sudo systemctl enable --now containerd
+
+    echo
+    echo "Reloaded systemd daemon"
+}
+
+if check_containerd_service_running_function
+then
+    echo
+    echo "##### containerd service running #####"
+else
+    echo
+    echo "# containerd service not running, installing #"
+
+    if check_containerd_service_file_function
+    then
+        echo
+        echo "## containerd service file found ##"
+    else
+        echo
+        echo "# containerd service file not found #"
+
+        install_containerd_service_file_function
+
+        if check_containerd_service_file_function
+        then
+            echo
+            echo "## containerd service file found ##"
+
+            start_containerd_service_function
+
+            if check_containerd_service_running_function
+            then
+                echo
+                echo "##### containerd service running #####"
+            else
+                echo
+                echo "###############################################"
+                echo "################# ERROR #######################"
+                echo "###############################################"
+                echo "####### containerd service not running ########"
+                echo
+                exit 1
+            fi
+        else
+            echo
+            echo "###############################################"
+            echo "################# ERROR #######################"
+            echo "###############################################"
+            echo "###### containerd service file not found ######"
+            echo
+            exit 1
+        fi
+    fi
+
+    start_containerd_service
+    if check_containerd_installed_function
+    then
+        echo
+        echo "##### containerd installed #####"
+    else
+
+        echo
+        echo "###############################################"
+        echo "################# ERROR #######################"
+        echo "###############################################"
+        echo "########### containerd not installed ##########"
+        echo
+        exit 1
+    fi
+fi
+
+install_runc_function() {
+
+    ## Install runc
+    RUNC_VERSION=1.1.11
+    wget -qP files https://github.com/opencontainers/runc/releases/download/v${RUNC_VERSION}/runc.arm64
+    sudo install -m 755 files/runc.arm64 /usr/local/sbin/runc
+
+    ## Mark runc so apt package manager doesn't overwright 
+    sudo apt-mark hold runc
+
+    echo
+    echo "######## runc version ########"
+    echo
+    runc --version
+    echo
+}
+
+if check_runc_installed_function
+then
+    echo
+    echo "##### runc already installed #####"
+else
+    echo
+    echo "### runc not found, installing ###"
+
+    install_runc_function
+
+    if check_runc_installed_function
+    then
+        echo
+        echo "##### runc installed #####"
+    else
+
+        echo
+        echo "###############################################"
+        echo "################# ERROR #######################"
+        echo "###############################################"
+        echo "############## runc not installed #############"
+        echo
+        exit 1
+    fi
+fi
+
+# TODO CNI plugins installed by kubernetes-cni package (a dependencies for kubelet and kubeadm)
+: '
+
+## Install CNI plugins
+
+install_cni_plugins_function() {
+
+    ## Load CNI plugins
+    CNI_VERSION=1.4.0
+    sudo mkdir -p /opt/cni/bin
+    wget -qP files https://github.com/containernetworking/plugins/releases/download/v${CNI_VERSION}/cni-plugins-linux-arm64-v${CNI_VERSION}.tgz
+    sudo tar Cxzvf /opt/cni/bin files/cni-plugins-linux-arm64-v${CNI_VERSION}.tgz
+
+    echo
+    echo "Downloaded CNI plugins"
+}
+
+if check_cni_plugins_installed_function
+then
+    echo
+    echo "##### cni plugins already installed #####"
+else
+    echo
+    echo "### cni plugins not found, installing ###"
+
+    install_cni_plugins_function
+
+    if check_cni_plugins_installed_function
+    then
+        echo
+        echo "####### cni plugins installed #######"
+    else
+
+        echo
+        echo "###############################################"
+        echo "################# ERROR #######################"
+        echo "###############################################"
+        echo "############## cni plugins not installed #############"
+        echo
+        exit 1
+    fi
+fi
+'
+
+# TODO Create the containerd config file
+: '
 ### Create the containerd config file
 sudo mkdir -p /etc/containerd
 containerd config default | sudo tee /etc/containerd/config.toml > /dev/null
@@ -96,33 +363,36 @@ containerd config default | sudo tee /etc/containerd/config.toml > /dev/null
 ###     SystemdCgroup = true
 sudo sed -i 's/SystemdCgroup = false/SystemdCgroup = true/g' /etc/containerd/config.toml
 sudo systemctl restart containerd
-
-echo
-echo "######## SystemdCgroup true ########"
-echo
-sudo crictl info | grep SystemdCgroup
-echo
+'
 
 ### install kubeadm kubelet kubectl
-KUBE_VERSION=1.25.0
 sudo apt --yes install apt-transport-https ca-certificates curl
 
-sudo curl -fsSLo /usr/share/keyrings/kubernetes-archive-keyring.gpg https://packages.cloud.google.com/apt/doc/apt-key.gpg
-echo "deb [signed-by=/usr/share/keyrings/kubernetes-archive-keyring.gpg] https://apt.kubernetes.io/ kubernetes-xenial main" | sudo tee /etc/apt/sources.list.d/kubernetes.list
+### https://kubernetes.io/blog/2023/08/15/pkgs-k8s-io-introduction/ describes the current Kubernetes package repository approach
+
+KUBE_MINOR_VERSION=1.29
+KUBE_PATCH_VERSION=0
+KUBE_REVISION=1.1
+KUBE_VERSION=${KUBE_MINOR_VERSION}.${KUBE_PATCH_VERSION}-${KUBE_REVISION}
+
+echo "deb [signed-by=/etc/apt/keyrings/kubernetes-apt-keyring.gpg] https://pkgs.k8s.io/core:/stable:/v"${KUBE_MINOR_VERSION}"/deb/ /" | sudo tee /etc/apt/sources.list.d/kubernetes.list
+curl -fsSL https://pkgs.k8s.io/core:/stable:/v${KUBE_MINOR_VERSION}/deb/Release.key | sudo gpg --dearmor -o /etc/apt/keyrings/kubernetes-apt-keyring.gpg
 
 sudo apt update
-sudo apt --yes install kubelet=${KUBE_VERSION}-00 kubeadm=${KUBE_VERSION}-00 kubectl=${KUBE_VERSION}-00
+sudo apt --yes install kubelet=${KUBE_VERSION} kubeadm=${KUBE_VERSION} kubectl=${KUBE_VERSION}
 sudo apt-mark hold kubeadm kubelet kubectl
 
 echo
 echo "######## kubectl version ########"
 echo
 kubectl version --client
+echo
 
 echo
 echo "######## kubeadm version ########"
 echo
 kubeadm version
+echo
 
 echo
 echo "######## kubelet version ########"
@@ -130,7 +400,33 @@ echo
 kubelet --version
 echo
 
+# cri-tools (crictl & critest) and kubernetes-cni (check these aren't the CNI plugins above) are dependencies for kubelet and kubeadm and should be installed above
+
+# TODO Set the endpoint for crictl to containerd
+: '
+### Set the endpoint for crictl to containerd
+cat <<EOF | sudo tee /etc/crictl.yaml
+runtime-endpoint: unix:///run/containerd/containerd.sock
+image-endpoint: unix:///run/containerd/containerd.sock
+timeout: 10
+EOF
+'
+
+# TODO Check containerd is configured to use the systemd cgroup driver
+: '
+### Check containerd is configured to use the systemd cgroup driver
+echo
+echo "############ SystemdCgroup true ############"
+echo "# The value below must SystemdCgroup: true #"
+echo
+sudo crictl info | grep SystemdCgroup
+echo
+'
+
+# TODO Set up auto complete and alias for kubectl
+: '
 ### Set up auto complete and alias for kubectl
 echo 'source <(kubectl completion bash)' >> ~/.bashrc
 echo 'alias k=kubectl' >> ~/.bashrc
 echo 'complete -F __start_kubectl k' >> ~/.bashrc
+'
