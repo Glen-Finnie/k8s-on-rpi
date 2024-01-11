@@ -20,7 +20,7 @@ fi
 sudo apt --yes install apt-transport-https ca-certificates curl gpg
 
 # https://docs.cilium.io/en/stable/operations/system_requirements/#ubuntu-22-04-on-raspberry-pi
-sudo apt --yes linux-modules-extra-raspi
+sudo apt --yes install linux-modules-extra-raspi
 
 # Enable Kernal overlay & br_netfilter modules required by containerd
 # Add overlay & br_netfilter to k8s.conf file so module will load on
