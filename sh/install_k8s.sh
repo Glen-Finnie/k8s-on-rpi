@@ -208,12 +208,16 @@ then
     echo "##### containerd service running #####"
 else
     echo
-    echo "# containerd service not running, installing #"
+    echo "# containerd service not running #"
+    echo "# checking service file present #"
 
     if check_containerd_service_file_function
     then
         echo
         echo "## containerd service file found ##"
+
+        start_containerd_service_function
+
     else
         echo
         echo "# containerd service file not found #"
@@ -226,44 +230,27 @@ else
             echo "## containerd service file found ##"
 
             start_containerd_service_function
-
-            if check_containerd_service_running_function
-            then
-                echo
-                echo "##### containerd service running #####"
-            else
-                echo
-                echo "###############################################"
-                echo "################# ERROR #######################"
-                echo "###############################################"
-                echo "####### containerd service not running ########"
-                echo
-                exit 1
-            fi
         else
             echo
             echo "###############################################"
             echo "################# ERROR #######################"
             echo "###############################################"
-            echo "###### containerd service file not found ######"
+            echo "##### containerd service file not found #######"
             echo
             exit 1
         fi
     fi
 
-    start_containerd_service
-
-    if check_containerd_installed_function
+    if check_containerd_service_running_function
     then
         echo
-        echo "##### containerd installed #####"
+        echo "##### containerd service running #####"
     else
-
         echo
         echo "###############################################"
         echo "################# ERROR #######################"
         echo "###############################################"
-        echo "########### containerd not installed ##########"
+        echo "####### containerd service not running ########"
         echo
         exit 1
     fi
@@ -430,10 +417,13 @@ echo
 sudo crictl info | grep SystemdCgroup
 echo
 
-# TODO Set up auto complete and alias for kubectl
-: '
-### Set up auto complete and alias for kubectl
-echo 'source <(kubectl completion bash)' >> ~/.bashrc
-echo 'alias k=kubectl' >> ~/.bashrc
-echo 'complete -F __start_kubectl k' >> ~/.bashrc
-'
+# Set up auto complete and alias for kubectl
+if ! grep -q 'source <(kubectl completion bash)' ~/.bashrc; then
+    echo 'source <(kubectl completion bash)' >> ~/.bashrc
+fi
+if ! grep -q 'alias k=kubectl' ~/.bashrc; then
+    echo 'alias k=kubectl' >> ~/.bashrc
+fi
+if ! grep -q 'complete -F __start_kubectl k' ~/.bashrc; then
+    echo 'complete -F __start_kubectl k' >> ~/.bashrc
+fi
