@@ -17,6 +17,11 @@ then
     exit 1
 fi
 
+sudo apt --yes install apt-transport-https ca-certificates curl gpg
+
+# https://docs.cilium.io/en/stable/operations/system_requirements/#ubuntu-22-04-on-raspberry-pi
+sudo apt --yes linux-modules-extra-raspi
+
 # Enable Kernal overlay & br_netfilter modules required by containerd
 # Add overlay & br_netfilter to k8s.conf file so module will load on
 # restart.
@@ -161,6 +166,7 @@ else
     echo "### containerd not found, installing ###"
 
     install_containerd_function
+
     if check_containerd_installed_function
     then
         echo
@@ -246,6 +252,7 @@ else
     fi
 
     start_containerd_service
+
     if check_containerd_installed_function
     then
         echo
@@ -305,115 +312,116 @@ else
     fi
 fi
 
-# TODO CNI plugins installed by kubernetes-cni package (a dependencies for kubelet and kubeadm)
-: '
+install_containerd_config_file_function() {
 
-## Install CNI plugins
+    ### Create the containerd config file
+    sudo mkdir -p /etc/containerd
+    containerd config default | sudo tee /etc/containerd/config.toml > /dev/null
 
-install_cni_plugins_function() {
+    ### Modify containerd config file to use systemd
 
-    ## Load CNI plugins
-    CNI_VERSION=1.4.0
-    sudo mkdir -p /opt/cni/bin
-    wget -qP files https://github.com/containernetworking/plugins/releases/download/v${CNI_VERSION}/cni-plugins-linux-arm64-v${CNI_VERSION}.tgz
-    sudo tar Cxzvf /opt/cni/bin files/cni-plugins-linux-arm64-v${CNI_VERSION}.tgz
-
-    echo
-    echo "Downloaded CNI plugins"
+    ### [plugins."io.containerd.grpc.v1.cri".containerd.runtimes.runc]
+    ###   ...
+    ###   [plugins."io.containerd.grpc.v1.cri".containerd.runtimes.runc.options]
+    ###     SystemdCgroup = true
+    sudo sed -i 's/SystemdCgroup = false/SystemdCgroup = true/g' /etc/containerd/config.toml
+    sudo systemctl restart containerd
 }
 
-if check_cni_plugins_installed_function
+if check_containerd_config_file_function
 then
     echo
-    echo "##### cni plugins already installed #####"
+    echo "##### containerd config.toml in present #####"
 else
     echo
-    echo "### cni plugins not found, installing ###"
+    echo "### containerd config.toml not found ###"
 
-    install_cni_plugins_function
+    install_containerd_config_file_function
 
-    if check_cni_plugins_installed_function
+    if check_containerd_config_file_function
     then
         echo
-        echo "####### cni plugins installed #######"
+        echo "##### containerd config.toml in present #####"
     else
 
         echo
         echo "###############################################"
         echo "################# ERROR #######################"
         echo "###############################################"
-        echo "############## cni plugins not installed #############"
+        echo "####### containerd config.toml not found ######"
         echo
         exit 1
     fi
 fi
-'
 
-# TODO Create the containerd config file
-: '
-### Create the containerd config file
-sudo mkdir -p /etc/containerd
-containerd config default | sudo tee /etc/containerd/config.toml > /dev/null
+install_kubeadm_kubelet_kubectl_function() {
 
-### Modify containerd config file to use systemd
+    # install kubeadm kubelet kubectl
 
-### [plugins."io.containerd.grpc.v1.cri".containerd.runtimes.runc]
-###   ...
-###   [plugins."io.containerd.grpc.v1.cri".containerd.runtimes.runc.options]
-###     SystemdCgroup = true
-sudo sed -i 's/SystemdCgroup = false/SystemdCgroup = true/g' /etc/containerd/config.toml
-sudo systemctl restart containerd
-'
+    ### https://kubernetes.io/blog/2023/08/15/pkgs-k8s-io-introduction/ describes the current Kubernetes package repository approach
 
-### install kubeadm kubelet kubectl
-sudo apt --yes install apt-transport-https ca-certificates curl
+    KUBE_MINOR_VERSION=1.29
+    KUBE_PATCH_VERSION=0
+    KUBE_REVISION=1.1
+    KUBE_VERSION=${KUBE_MINOR_VERSION}.${KUBE_PATCH_VERSION}-${KUBE_REVISION}
 
-### https://kubernetes.io/blog/2023/08/15/pkgs-k8s-io-introduction/ describes the current Kubernetes package repository approach
+    echo "deb [signed-by=/etc/apt/keyrings/kubernetes-apt-keyring.gpg] https://pkgs.k8s.io/core:/stable:/v"${KUBE_MINOR_VERSION}"/deb/ /" | sudo tee /etc/apt/sources.list.d/kubernetes.list
+    curl -fsSL https://pkgs.k8s.io/core:/stable:/v${KUBE_MINOR_VERSION}/deb/Release.key | sudo gpg --dearmor -o /etc/apt/keyrings/kubernetes-apt-keyring.gpg
 
-KUBE_MINOR_VERSION=1.29
-KUBE_PATCH_VERSION=0
-KUBE_REVISION=1.1
-KUBE_VERSION=${KUBE_MINOR_VERSION}.${KUBE_PATCH_VERSION}-${KUBE_REVISION}
+    sudo apt update
+    sudo apt --yes install kubelet=${KUBE_VERSION} kubeadm=${KUBE_VERSION} kubectl=${KUBE_VERSION}
+    sudo apt-mark hold kubeadm kubelet kubectl
 
-echo "deb [signed-by=/etc/apt/keyrings/kubernetes-apt-keyring.gpg] https://pkgs.k8s.io/core:/stable:/v"${KUBE_MINOR_VERSION}"/deb/ /" | sudo tee /etc/apt/sources.list.d/kubernetes.list
-curl -fsSL https://pkgs.k8s.io/core:/stable:/v${KUBE_MINOR_VERSION}/deb/Release.key | sudo gpg --dearmor -o /etc/apt/keyrings/kubernetes-apt-keyring.gpg
+    sudo apt-mark hold cri-tools kubernetes-cni
+    # cri-tools (crictl & critest) and kubernetes-cni are dependencies for kubelet and kubeadm and will be installed along with kubeadm
+}
 
-sudo apt update
-sudo apt --yes install kubelet=${KUBE_VERSION} kubeadm=${KUBE_VERSION} kubectl=${KUBE_VERSION}
-sudo apt-mark hold kubeadm kubelet kubectl
+if check_kubernetes_apt_repository_function
+then
+    echo
+    echo "# kubeadm kubelet kubectl already installed #"
+else
+    install_kubeadm_kubelet_kubectl_function
+fi
 
-echo
-echo "######## kubectl version ########"
-echo
-kubectl version --client
-echo
+install_crictl_config_file_function() {
 
-echo
-echo "######## kubeadm version ########"
-echo
-kubeadm version
-echo
-
-echo
-echo "######## kubelet version ########"
-echo
-kubelet --version
-echo
-
-# cri-tools (crictl & critest) and kubernetes-cni (check these aren't the CNI plugins above) are dependencies for kubelet and kubeadm and should be installed above
-
-# TODO Set the endpoint for crictl to containerd
-: '
 ### Set the endpoint for crictl to containerd
-cat <<EOF | sudo tee /etc/crictl.yaml
+
+    cat <<EOF | sudo tee /etc/crictl.yaml
 runtime-endpoint: unix:///run/containerd/containerd.sock
 image-endpoint: unix:///run/containerd/containerd.sock
 timeout: 10
 EOF
-'
 
-# TODO Check containerd is configured to use the systemd cgroup driver
-: '
+}
+
+if check_crictl_config_file_function
+then
+    echo
+    echo "# crictl.yaml file present #"
+else
+    echo
+    echo "# crictl.yaml file not found #"
+
+    install_crictl_config_file_function
+
+    if check_crictl_config_file_function
+    then
+        echo
+        echo "# crictl.yaml file present #"
+    else
+
+        echo
+        echo "###############################################"
+        echo "################# ERROR #######################"
+        echo "###############################################"
+        echo "########## crictl.yaml file not found #########"
+        echo
+        exit 1
+    fi
+fi
+
 ### Check containerd is configured to use the systemd cgroup driver
 echo
 echo "############ SystemdCgroup true ############"
@@ -421,7 +429,6 @@ echo "# The value below must SystemdCgroup: true #"
 echo
 sudo crictl info | grep SystemdCgroup
 echo
-'
 
 # TODO Set up auto complete and alias for kubectl
 : '

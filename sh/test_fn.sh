@@ -246,3 +246,70 @@ check_cni_plugins_installed_function () {
         return 1
     fi   
 }
+
+check_containerd_config_file_function () {
+
+    FILE=/etc/containerd/config.toml
+
+    if test -f "$FILE"
+    then
+
+        echo
+        echo "# containerd config.toml file present #"
+
+        # 0 = true
+        return 0
+    else
+
+        echo
+        echo "# containerd config.toml file not present #"
+
+        # 1 = false
+        return 1
+    fi
+}
+
+check_kubernetes_apt_repository_function () {
+
+    FILE1=/etc/apt/sources.list.d/kubernetes.list
+    FILE2=/etc/apt/keyrings/kubernetes-apt-keyring.gpg
+
+    if test -f "$FILE1" && test -f "$FILE2"
+    then
+
+        echo
+        echo "# kubernetes apt repository present #"
+
+        # 0 = true
+        return 0
+    else
+
+        echo
+        echo "# kubernetes apt repository not present #"
+
+        # 1 = false
+        return 1
+    fi
+}
+
+check_crictl_config_file_function () {
+
+    FILE=/etc/crictl.yaml
+
+    if test -f "$FILE"
+    then
+
+        echo
+        echo "# crictl.yaml file present #"
+
+        # 0 = true
+        return 0
+    else
+
+        echo
+        echo "# crictl.yaml file not present #"
+
+        # 1 = false
+        return 1
+    fi
+}
