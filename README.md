@@ -17,24 +17,28 @@ On a new install of Ubuntu 22.04, clone the Git repository
 git clone https://github.com/Glen-Finnie/k8s-on-rpi.git
 ```
 
+Change into the scripts directory.
+
+```sh
+cd k8s-on-rpi/sh
+```
+
 Update the Ubuntu packages.
 
 ```sh
-cd k8s-on-rpi
 ./update.sh
 ```
 
-After the Ubuntu packages have been updated reboot the server.
+Install Kubernetes and the required prerequisite components.
+
+```sh
+./install_k8s.sh
+```
+
+After all the software has been installed, reboot the server.
 
 ```sh
 sudo sync; sudo reboot
-```
-
-Once the server has come back up, install Kubernetes and the required prerequisite components.
-
-```sh
-cd k8s-on-rpi
-./install_k8s.sh
 ```
 
 ## Initialize the Kubernetes Cluster
@@ -129,4 +133,59 @@ Image versions         cilium-operator    quay.io/cilium/operator-generic:v1.14.
                        cilium             quay.io/cilium/cilium:v1.14.5@sha256:d3b287029755b6a47dee01420e2ea469469f1b174a2089c10af7e5e9289ef05b: 1
 ```
 
-### Initialize Worker Node
+## Initialize Worker Node
+
+Repeat the [Install](#install) process above, updating the Ubuntu packages and install Kubernetes, don't initialize the kubernetes cluster.
+
+To join the cluster, on the worker node execute a *kubeadm join* command in the form:
+
+```sh
+sudo kubeadm join <<control-plane host IP>>:6443 --token <<bootstrap token>> --discovery-token-ca-cert-hash <<ca-cert hash>>
+```
+
+This command is displayed on the control-plane at the completion of the cluster initialize.
+
+Boot strap tokens have a limited *time to live* (TTL), the default is 24 hours. To list all the available bootstrap tokens execute:
+
+```sh
+kubeadm token list
+```
+
+A hash of the CA certificate is also needed, this can be obtained with *openssl*. E.g., to obtain a SHA 256 hash of the CA certificate execute:
+
+```sh
+openssl x509 -in /etc/kubernetes/pki/ca.crt -noout -pubkey | openssl rsa -pubin -outform DER 2>/dev/null | sha256sum | cut -d' ' -f1
+```
+
+When using the hash it should be prefixed with the hash type, e.g., if the command above returned *b592774b10c9b2f89b4b563754da7614cd44b262f55ec27055ffd2fc49d77776* the discovery-token-ca-cert-hash value would be *sha256:b592774b10c9b2f89b4b563754da7614cd44b262f55ec27055ffd2fc49d77776*
+
+For example, to join a cluster with a control-plane host IP *192.168.0.18*, on the control plane execute:
+
+```sh
+$ kubeadm token list
+TOKEN                     TTL         EXPIRES                USAGES                   DESCRIPTION                                                EXTRA GROUPS
+i3nr7s.xqj8kt5xinrn95cp   23h         2024-01-14T12:11:39Z   authentication,signing   <none>                                                     system:bootstrappers:kubeadm:default-node-token
+$ openssl x509 -in /etc/kubernetes/pki/ca.crt -noout -pubkey | openssl rsa -pubin -outform DER 2>/dev/null | sha256sum | cut -d' ' -f1
+b592774b10c9b2f89b4b563754da7614cd44b262f55ec27055ffd2fc49d77776
+```
+
+The join command would be:
+
+```sh
+sudo kubeadm join 192.168.0.18:6443 --token i3nr7s.xqj8kt5xinrn95cp --discovery-token-ca-cert-hash sha256:b592774b10c9b2f89b4b563754da7614cd44b262f55ec27055ffd2fc49d77776
+```
+
+**TL;DR** If the bootstrap token has expired (*kubeadm token list* does not return any values) or simply for convenience, create a new bootstrap token and display the join command:
+
+```sh
+kubeadm token create --print-join-command
+```
+
+**Note** on the worker nodes that the *kubeadm* command needs to be prefixed with *sudo*.
+
+## Todo
+
+Look into the following:
+
+* [Enable automatic node CIDR allocation](https://docs.cilium.io/en/latest/network/kubernetes/requirements/#enable-automatic-node-cidr-allocation-recommended)
+* [Kubernetes Without kube-proxy](https://docs.cilium.io/en/latest/network/kubernetes/kubeproxy-free/)
