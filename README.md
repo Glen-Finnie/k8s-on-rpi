@@ -133,6 +133,24 @@ Image versions         cilium-operator    quay.io/cilium/operator-generic:v1.14.
                        cilium             quay.io/cilium/cilium:v1.14.5@sha256:d3b287029755b6a47dee01420e2ea469469f1b174a2089c10af7e5e9289ef05b: 1
 ```
 
+#### Post Installation
+
+If using Istio for service mesh and/or if Istio is a dependency for other components review the [Integration with Istio](https://docs.cilium.io/en/latest/network/servicemesh/istio/#integration-with-istio).
+
+If cilium has been configured as a Kube-proxy replacement then according to the Cilium documentation above, the *bpf-lb-sock-hostns-only* value must be set to true. Test the current setting with:
+
+```sh
+kubectl get configmaps -n kube-system cilium-config -oyaml | grep bpf-lb-sock-hostns-only
+```
+
+The value in the configmap should be true, if not present or false then set the *bpf-lb-sock-hostns-only* with the command:
+
+```sh
+$ cilium config set bpf-lb-sock-hostns-only true
+✨ Patching ConfigMap cilium-config with bpf-lb-sock-hostns-only=true...
+♻️  Restarted Cilium pods
+```
+
 ## Initialize Worker Node
 
 Repeat the [Install](#install) process above, updating the Ubuntu packages and install Kubernetes, don't initialize the kubernetes cluster.
@@ -189,3 +207,4 @@ Look into the following:
 
 * [Enable automatic node CIDR allocation](https://docs.cilium.io/en/latest/network/kubernetes/requirements/#enable-automatic-node-cidr-allocation-recommended)
 * [Kubernetes Without kube-proxy](https://docs.cilium.io/en/latest/network/kubernetes/kubeproxy-free/)
+    [Kube-proxy Replacement](https://cilium.io/use-cases/kube-proxy/)

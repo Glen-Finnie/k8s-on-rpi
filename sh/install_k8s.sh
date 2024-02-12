@@ -83,7 +83,6 @@ add_net_configurations_function() {
    # sysctl params required by setup
    cat <<EOF | sudo tee /etc/sysctl.d/k8s.conf
 net.bridge.bridge-nf-call-iptables  = 1
-net.bridge.bridge-nf-call-ip6tables = 1
 net.ipv4.ip_forward                 = 1
 EOF
 
@@ -97,7 +96,7 @@ EOF
 echo
 echo "# Forwarding IPv4 and letting iptables see bridged traffic #"
 
-if check_ip_forward_enabled_function && check_bridged_packets_sent_to_iptable_function && check_bridged_IP6_packets_sent_to_iptable_function
+if check_ip_forward_enabled_function && check_bridged_packets_sent_to_iptable_function
 then
 
     echo
@@ -110,7 +109,7 @@ else
 
     add_net_configurations_function
 
-    if check_ip_forward_enabled_function && check_bridged_packets_sent_to_iptable_function && check_bridged_IP6_packets_sent_to_iptable_function
+    if check_ip_forward_enabled_function && check_bridged_packets_sent_to_iptable_function
     then
 
         echo
@@ -129,25 +128,25 @@ else
 fi
 
 # Disable swap
-swapoff -a
+sudo swapoff -a
 echo
 echo "# Disabled swap #"
 
-# Install containerd, runc, CNI plugins
+# Install containerd, runc
 # From https://github.com/containerd/containerd/blob/main/docs/getting-started.md
 
 echo
-echo "# Starting install of containerd, runc, CNI plugins #"
+echo "# Starting install of containerd, runc #"
 mkdir -p files
 
 install_containerd_function() {
 
     ## Install containerd
-    CONTAINERD_VERSION=1.7.11
+    CONTAINERD_VERSION=1.7.13
     wget -qP files https://github.com/containerd/containerd/releases/download/v${CONTAINERD_VERSION}/containerd-${CONTAINERD_VERSION}-linux-arm64.tar.gz
     sudo tar Cxzvf /usr/local files/containerd-${CONTAINERD_VERSION}-linux-arm64.tar.gz
 
-    ## Mark containerd so apt package manager doesn't overwright 
+    ## Mark containerd so apt package manager doesn't overwrite 
     sudo apt-mark hold containerd
 
     echo
@@ -259,11 +258,11 @@ fi
 install_runc_function() {
 
     ## Install runc
-    RUNC_VERSION=1.1.11
+    RUNC_VERSION=1.1.12
     wget -qP files https://github.com/opencontainers/runc/releases/download/v${RUNC_VERSION}/runc.arm64
     sudo install -m 755 files/runc.arm64 /usr/local/sbin/runc
 
-    ## Mark runc so apt package manager doesn't overwright 
+    ## Mark runc so apt package manager doesn't overwrite 
     sudo apt-mark hold runc
 
     echo
@@ -348,7 +347,7 @@ install_kubeadm_kubelet_kubectl_function() {
     ### https://kubernetes.io/blog/2023/08/15/pkgs-k8s-io-introduction/ describes the current Kubernetes package repository approach
 
     KUBE_MINOR_VERSION=1.29
-    KUBE_PATCH_VERSION=0
+    KUBE_PATCH_VERSION=1
     KUBE_REVISION=1.1
     KUBE_VERSION=${KUBE_MINOR_VERSION}.${KUBE_PATCH_VERSION}-${KUBE_REVISION}
 
