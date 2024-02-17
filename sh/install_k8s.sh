@@ -350,7 +350,7 @@ install_kubeadm_kubelet_kubectl_function() {
     ### https://kubernetes.io/blog/2023/08/15/pkgs-k8s-io-introduction/ describes the current Kubernetes package repository approach
 
     KUBE_MINOR_VERSION=1.29
-    KUBE_PATCH_VERSION=1
+    KUBE_PATCH_VERSION=2
     KUBE_REVISION=1.1
     KUBE_VERSION=${KUBE_MINOR_VERSION}.${KUBE_PATCH_VERSION}-${KUBE_REVISION}
 

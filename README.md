@@ -1,6 +1,6 @@
 # K8s on RPI
 
-Base scripts for installing Kubernetes version 1.29.0 on Raspberry Pi 4 running Ubuntu LTS.
+Base scripts for installing Kubernetes version 1.29 on Raspberry Pi 4 running Ubuntu LTS.
 
 Scripts are designed to run on Ubuntu 22.04 (tested on Ubuntu Server 22.04.3 LTS 64-bit).
 
