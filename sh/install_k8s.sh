@@ -142,6 +142,49 @@ echo
 echo "# Starting install of containerd, runc #"
 mkdir -p files
 
+install_runc_function() {
+
+    ## Install runc
+    RUNC_VERSION=1.1.12
+    wget -qP files https://github.com/opencontainers/runc/releases/download/v${RUNC_VERSION}/runc.arm64
+    sudo install -m 755 files/runc.arm64 /usr/local/sbin/runc
+
+    ## Mark runc so apt package manager doesn't overwrite 
+    sudo apt-mark hold runc
+
+    echo
+    echo "######## runc version ########"
+    echo
+    runc --version
+    echo
+}
+
+if check_runc_installed_function
+then
+    echo
+    echo "##### runc already installed #####"
+else
+    echo
+    echo "### runc not found, installing ###"
+
+    install_runc_function
+
+    if check_runc_installed_function
+    then
+        echo
+        echo "##### runc installed #####"
+    else
+
+        echo
+        echo "###############################################"
+        echo "################# ERROR #######################"
+        echo "###############################################"
+        echo "############## runc not installed #############"
+        echo
+        exit 1
+    fi
+fi
+
 install_containerd_function() {
 
     ## Install containerd
@@ -253,49 +296,6 @@ else
         echo "################# ERROR #######################"
         echo "###############################################"
         echo "####### containerd service not running ########"
-        echo
-        exit 1
-    fi
-fi
-
-install_runc_function() {
-
-    ## Install runc
-    RUNC_VERSION=1.1.12
-    wget -qP files https://github.com/opencontainers/runc/releases/download/v${RUNC_VERSION}/runc.arm64
-    sudo install -m 755 files/runc.arm64 /usr/local/sbin/runc
-
-    ## Mark runc so apt package manager doesn't overwrite 
-    sudo apt-mark hold runc
-
-    echo
-    echo "######## runc version ########"
-    echo
-    runc --version
-    echo
-}
-
-if check_runc_installed_function
-then
-    echo
-    echo "##### runc already installed #####"
-else
-    echo
-    echo "### runc not found, installing ###"
-
-    install_runc_function
-
-    if check_runc_installed_function
-    then
-        echo
-        echo "##### runc installed #####"
-    else
-
-        echo
-        echo "###############################################"
-        echo "################# ERROR #######################"
-        echo "###############################################"
-        echo "############## runc not installed #############"
         echo
         exit 1
     fi
