@@ -2,6 +2,6 @@
 
 set -e
 
-sudo apt --yes update
+sudo apt --yes full-upgrade
 sudo apt --yes autoremove
 sudo apt --yes clean

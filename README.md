@@ -23,10 +23,10 @@ Change into the scripts directory.
 cd k8s-on-rpi/sh
 ```
 
-Update the Ubuntu packages.
+Run a full upgrade of the Ubuntu packages.
 
 ```sh
-./update.sh
+./upgrade.sh
 ```
 
 Install Kubernetes and the required prerequisite components.

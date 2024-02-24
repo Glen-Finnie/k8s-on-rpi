@@ -17,6 +17,19 @@ then
     exit 1
 fi
 
+MACHINE=$(uname -m)
+if [ $MACHINE != "aarch64" ]
+then
+    echo
+    echo "########################################"
+    echo "############### ERROR ##################"
+    echo "########################################"
+    echo
+    echo "This script is intended for 64 Ubuntu"
+    echo "You're using: ${MACHINE}, i.e., 32 bit"
+    exit 1
+fi
+
 sudo apt --yes install apt-transport-https ca-certificates curl gpg
 
 # https://docs.cilium.io/en/stable/operations/system_requirements/#ubuntu-22-04-on-raspberry-pi
